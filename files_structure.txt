@@ -54,78 +54,55 @@ import (
 	"strings"
 )
 
-func main() {
-	separator := createSeparator(20)
-	initializeReaderIgnore()
-	processDirectoryStructure(".", "files_structure.txt", separator)
-}
+const separatorLength = 20
 
-func createSeparator(length int) string {
-	return strings.Repeat("-", length)
+func main() {
+	initializeReaderIgnore()
+	processDirectoryStructure(".", "files_structure.txt")
 }
 
 func initializeReaderIgnore() {
-	if _, err := os.Stat(".readerignore"); os.IsNotExist(err) {
-		defaultPatterns := []string{
-			"# Version Control",
-			".git",
-			"",
-			"# REPLIT",
-			".local",
-			".config",
-			".cache",
-			"",
-			"# Node",
-			"node_modules",
-			"",
-			"# Logs",
-			"*.log",
-			"",
-			"# IDEs and Editors",
-			".vscode",
-			".idea",
-			"*.iml",
-			"*.ipr",
-			"*.iws",
-			"*~",
-			"*.swp",
-			"",
-			"# Operating System",
-			".DS_Store",
-			"Thumbs.db",
-			"",
-			"# Reader",
-			".readerignore",
-			"files_structure.txt",
-		}
-		writeFile(".readerignore", strings.Join(defaultPatterns, "\n"))
-	}
+	defaultIgnorePatterns := getDefaultIgnorePatterns()
+	createFileWithContent(".readerignore", defaultIgnorePatterns)
 }
 
-func writeFile(filename, content string) {
+func getDefaultIgnorePatterns() string {
+	patterns := []string{
+		"# Version Control", ".git", "",
+		"# REPLIT", ".local", ".config", ".cache", "",
+		"# Node", "node_modules", "",
+		"# Logs", "*.log", "",
+		"# IDEs and Editors", ".vscode", ".idea", "*.iml", "*.ipr", "*.iws", "*~", "*.swp", "",
+		"# Operating System", ".DS_Store", "Thumbs.db", "",
+		"# Reader", ".readerignore", "files_structure.txt",
+	}
+	return strings.Join(patterns, "\n")
+}
+
+func createFileWithContent(filename, content string) {
 	if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 		panic(err)
 	}
 }
 
-func processDirectoryStructure(startPath, outputFilePath, separator string) {
-	excludePatterns := readReaderIgnore()
-	paths := walkDirectory(startPath, excludePatterns, startPath)
+func processDirectoryStructure(startPath, outputFilePath string) {
+	excludePatterns := readIgnorePatterns(".readerignore")
+	paths := getDirectoryPaths(startPath, excludePatterns)
 
 	outputFile := createFile(outputFilePath)
 	defer outputFile.Close()
 
-	printContents(paths, outputFile, separator)
+	printDirectoryDetails(paths, outputFile)
 }
 
-func readReaderIgnore() []string {
-	var patterns []string
-	file, err := os.Open(".readerignore")
+func readIgnorePatterns(filename string) []string {
+	file, err := os.Open(filename)
 	if err != nil {
-		return patterns
+		return nil
 	}
 	defer file.Close()
 
+	var patterns []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -136,10 +113,10 @@ func readReaderIgnore() []string {
 	return patterns
 }
 
-func walkDirectory(startPath string, excludePatterns []string, relativePath string) []string {
+func getDirectoryPaths(startPath string, excludePatterns []string) []string {
 	var paths []string
 	filepath.Walk(startPath, func(path string, info os.FileInfo, err error) error {
-		if err == nil && path != startPath && !shouldExclude(path, excludePatterns, relativePath) {
+		if path != startPath && !shouldExclude(path, excludePatterns, startPath) {
 			paths = append(paths, path)
 		}
 		return nil
@@ -149,10 +126,7 @@ func walkDirectory(startPath string, excludePatterns []string, relativePath stri
 }
 
 func shouldExclude(path string, patterns []string, relativePath string) bool {
-	rel, err := filepath.Rel(relativePath, path)
-	if err != nil {
-		return false
-	}
+	rel, _ := filepath.Rel(relativePath, path)
 	for _, pattern := range patterns {
 		if strings.HasPrefix(rel, pattern) {
 			return true
@@ -169,12 +143,10 @@ func createFile(filename string) *os.File {
 	return file
 }
 
-func printContents(paths []string, outputFile *os.File, separator string) {
+func printDirectoryDetails(paths []string, outputFile *os.File) {
+	separator := strings.Repeat("-", separatorLength)
 	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
+		info, _ := os.Stat(path)
 		printFileDetails(path, info, outputFile, separator)
 	}
 }
