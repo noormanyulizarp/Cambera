@@ -1,4 +1,4 @@
-// Root directory structure (./main.go):
+// The file location of (main.go):
 // .
 // ├── main.go (<-)
 
@@ -27,10 +27,29 @@ func createSeparator(length int) string {
 func initializeReaderIgnore() {
 	if _, err := os.Stat(".readerignore"); os.IsNotExist(err) {
 		defaultPatterns := []string{
-			"#REPLIT", ".local", ".config", ".cache", "",
-			"#NODE", "node_modules", "",
-			"*.log", "",
-			"#READER", ".readerignore", ".files_structure.txt",
+			"# Version Control",
+			".git",
+			"",
+			"# REPLIT",
+			".local",
+			".config",
+			".cache",
+			"",
+			"# Node",
+			"node_modules",
+			"",
+			"# Logs",
+			"*.log",
+			"",
+			"# IDEs and Editors",
+			".vscode",
+			".idea",
+			"*~",
+			"*.swp",
+			"",
+			"# Reader",
+			".readerignore",
+			"files_structure.txt",
 		}
 		writeFile(".readerignore", strings.Join(defaultPatterns, "\n"))
 	}
@@ -114,21 +133,24 @@ func printContents(paths []string, outputFile *os.File, separator string) {
 }
 
 func printFileDetails(path string, info os.FileInfo, outputFile *os.File, separator string) {
-	// Print file size
-	fmt.Fprintf(outputFile, "\n// The size of (%s): %dKB\n", path, info.Size()/1024)
+	sizeStr := formatFileSize(info.Size())
+	fmt.Fprintf(outputFile, "// The size of (%s): %s\n", path, sizeStr)
 	fmt.Fprintln(outputFile, separator)
-
-	// Print file location
-	fmt.Fprintf(outputFile, "\n// The file location of (%s):\n", path)
+	fmt.Fprintf(outputFile, "// The file location of (%s):\n", path)
 	fmt.Fprintln(outputFile, "// .")
 	fmt.Fprintf(outputFile, "// ├── %s (<-)\n", filepath.Base(path))
 	fmt.Fprintln(outputFile, separator)
-
-	// Print file contents
 	if !info.IsDir() {
 		content, _ := ioutil.ReadFile(path)
-		fmt.Fprintf(outputFile, "\n// The content of (%s):\n", path)
+		fmt.Fprintf(outputFile, "// The content of (%s):\n", path)
 		fmt.Fprintln(outputFile, string(content))
 		fmt.Fprintln(outputFile, separator)
 	}
+}
+
+func formatFileSize(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%dB", size)
+	}
+	return fmt.Sprintf("%dKB", size/1024)
 }

@@ -1,13 +1,23 @@
-#REPLIT
+# Version Control
+.git
+
+# REPLIT
 .local
 .config
 .cache
 
-#NODE
+# Node
 node_modules
 
+# Logs
 *.log
 
-#READER
+# IDEs and Editors
+.vscode
+.idea
+*~
+*.swp
+
+# Reader
 .readerignore
-.files_structure.txt
+files_structure.txt
