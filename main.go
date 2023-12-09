@@ -1,12 +1,9 @@
-// Root directory structure (./main.go):
-// .
-// ├── main.go (<-)
-
 package main
 
 import (
 	"bufio"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,16 +11,29 @@ import (
 	"strings"
 )
 
-const separatorLength = 20
+const (
+	SeparatorLength    = 20
+	ReaderIgnoreFile   = ".readerignore"
+	OutputFileName     = "files_structure.txt"
+	DefaultPermissions = 0644
+)
 
 func main() {
-	initializeReaderIgnore()
-	processDirectoryStructure(".", "files_structure.txt")
+	rootPath := "."
+	ensureIgnoreFileExists()
+	paths := getPathsToProcess(rootPath, readIgnorePatterns())
+	processDirectoryStructure(rootPath, paths)
 }
 
-func initializeReaderIgnore() {
-	defaultIgnorePatterns := getDefaultIgnorePatterns()
-	createFileWithContent(".readerignore", defaultIgnorePatterns)
+func ensureIgnoreFileExists() {
+	if _, err := os.Stat(ReaderIgnoreFile); os.IsNotExist(err) {
+		content := getDefaultIgnorePatterns()
+		err := ioutil.WriteFile(ReaderIgnoreFile, []byte(content), DefaultPermissions)
+		if err != nil {
+			fmt.Printf("Error creating %s: %v\n", ReaderIgnoreFile, err)
+			os.Exit(1)
+		}
+	}
 }
 
 func getDefaultIgnorePatterns() string {
@@ -34,96 +44,93 @@ func getDefaultIgnorePatterns() string {
 		"# Logs", "*.log", "",
 		"# IDEs and Editors", ".vscode", ".idea", "*.iml", "*.ipr", "*.iws", "*~", "*.swp", "",
 		"# Operating System", ".DS_Store", "Thumbs.db", "",
-		"# Reader", ".readerignore", "files_structure.txt",
+		"# Reader", ".readerignore", "files_structure.txt", "",
+		"# Additional Patterns", ".project-rc", "__pycache__/", "*.py[cod]", "*$py.class", "*.so",
+		".Python", "build/", "develop-eggs/", "dist/", "downloads/", "eggs/", ".eggs/", "lib/", "lib64/",
+		"parts/", "sdist/", "var/", "wheels/", "*.egg-info/", ".installed.cfg", "*.egg", "MANIFEST",
+		"*.manifest", "*.spec", "pip-log.txt", "pip-delete-this-directory.txt", "htmlcov/", ".tox/",
+		".coverage", ".coverage.*", ".cache", "nosetests.xml", "coverage.xml", "*.cover", ".hypothesis/",
+		".pytest_cache/", "core.*", "*.mo", "*.pot", "*.log", "local_settings.py", "db.sqlite3", "instance/",
+		".webassets-cache", ".scrapy", "docs/_build/", "target/", ".ipynb_checkpoints", ".python-version",
+		"celerybeat-schedule", "*.sage.py", "/site", ".mypy_cache/", "",
+		"# Media files", "*.mp4", "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.ico",
 	}
 	return strings.Join(patterns, "\n")
 }
 
-func createFileWithContent(filename, content string) {
-	if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
-		panic(err)
-	}
-}
-
-func processDirectoryStructure(startPath, outputFilePath string) {
-	excludePatterns := readIgnorePatterns(".readerignore")
-	paths := getDirectoryPaths(startPath, excludePatterns)
-
-	outputFile := createFile(outputFilePath)
-	defer outputFile.Close()
-
-	printDirectoryDetails(paths, outputFile)
-}
-
-func readIgnorePatterns(filename string) []string {
-	file, err := os.Open(filename)
-	if err != nil {
+func getPathsToProcess(rootPath string, excludePatterns []string) []string {
+	var paths []string
+	err := filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			fmt.Printf("Error accessing path %q: %v\n", path, err)
+			return err
+		}
+		if !shouldExclude(path, excludePatterns) {
+			paths = append(paths, path)
+		}
 		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error walking the path %q: %v\n", rootPath, err)
+		os.Exit(1)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func readIgnorePatterns() []string {
+	var patterns []string
+	file, err := os.Open(ReaderIgnoreFile)
+	if err != nil {
+		fmt.Printf("Error opening %s: %v\n", ReaderIgnoreFile, err)
+		os.Exit(1)
 	}
 	defer file.Close()
 
-	var patterns []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.HasPrefix(line, "#") && line != "" {
+		if line != "" && !strings.HasPrefix(line, "#") {
 			patterns = append(patterns, line)
 		}
 	}
 	return patterns
 }
 
-func getDirectoryPaths(startPath string, excludePatterns []string) []string {
-	var paths []string
-	filepath.Walk(startPath, func(path string, info os.FileInfo, err error) error {
-		if path != startPath && !shouldExclude(path, excludePatterns, startPath) {
-			paths = append(paths, path)
-		}
-		return nil
-	})
-	sort.Strings(paths)
-	return paths
-}
-
-func shouldExclude(path string, patterns []string, relativePath string) bool {
-	rel, _ := filepath.Rel(relativePath, path)
-	for _, pattern := range patterns {
-		if strings.HasPrefix(rel, pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-func createFile(filename string) *os.File {
-	file, err := os.Create(filename)
+func processDirectoryStructure(rootPath string, paths []string) {
+	outputFile, err := os.Create(OutputFileName)
 	if err != nil {
-		panic(err)
+		fmt.Printf("Error creating output file: %v\n", err)
+		os.Exit(1)
 	}
-	return file
-}
+	defer outputFile.Close()
 
-func printDirectoryDetails(paths []string, outputFile *os.File) {
-	separator := strings.Repeat("-", separatorLength)
 	for _, path := range paths {
-		info, _ := os.Stat(path)
-		printFileDetails(path, info, outputFile, separator)
+		printFileDetails(rootPath, path, outputFile)
 	}
 }
 
-func printFileDetails(path string, info os.FileInfo, outputFile *os.File, separator string) {
+func printFileDetails(rootPath, path string, outputFile *os.File) {
+	info, err := os.Stat(path)
+	if err != nil {
+		fmt.Fprintf(outputFile, "Error getting info for %s: %v\n", path, err)
+		return
+	}
+
 	sizeStr := formatFileSize(info.Size())
-	fmt.Fprintf(outputFile, "// The size of (%s): %s\n", path, sizeStr)
-	fmt.Fprintln(outputFile, separator)
-	fmt.Fprintf(outputFile, "// The file location of (%s):\n", path)
-	fmt.Fprintln(outputFile, "// .")
-	fmt.Fprintf(outputFile, "// ├── %s (<-)\n", filepath.Base(path))
-	fmt.Fprintln(outputFile, separator)
+	relPath, _ := filepath.Rel(rootPath, path)
+
+	separator := strings.Repeat("-", SeparatorLength)
+	fmt.Fprintf(outputFile, "%s\n// The size of (%s): %s\n", separator, relPath, sizeStr)
+	fmt.Fprintf(outputFile, "%s\n// The file location of (%s):\n", separator, relPath)
+	printPath(outputFile, relPath)
+	fmt.Fprintf(outputFile, "%s\n", separator)
+
 	if !info.IsDir() {
 		content, _ := ioutil.ReadFile(path)
-		fmt.Fprintf(outputFile, "// The content of (%s):\n", path)
+		fmt.Fprintf(outputFile, "\n// The content of (%s):\n", relPath)
 		fmt.Fprintln(outputFile, string(content))
-		fmt.Fprintln(outputFile, separator)
+		fmt.Fprintf(outputFile, "%s\n", separator)
 	}
 }
 
@@ -132,4 +139,44 @@ func formatFileSize(size int64) string {
 		return fmt.Sprintf("%dB", size)
 	}
 	return fmt.Sprintf("%dKB", size/1024)
+}
+
+func shouldExclude(path string, patterns []string) bool {
+	relPath, err := filepath.Rel(".", path)
+	if err != nil {
+		return false
+	}
+
+	for _, pattern := range patterns {
+		matched, err := filepath.Match(pattern, relPath)
+		if err != nil {
+			fmt.Printf("Error matching pattern %s: %v\n", pattern, err)
+			continue
+		}
+
+		for _, part := range strings.Split(relPath, string(os.PathSeparator)) {
+			dirMatched, _ := filepath.Match(pattern, part)
+			if dirMatched {
+				return true
+			}
+		}
+
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func printPath(outputFile *os.File, relPath string) {
+	dirs := strings.Split(relPath, string(os.PathSeparator))
+	indent := ""
+	for i, dir := range dirs {
+		if i == len(dirs)-1 {
+			fmt.Fprintf(outputFile, "%s└── %s (<-)\n", indent, dir)
+		} else {
+			fmt.Fprintf(outputFile, "%s├── %s\n", indent, dir)
+			indent += "│   "
+		}
+	}
 }
