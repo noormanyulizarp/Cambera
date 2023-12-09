@@ -1,0 +1,134 @@
+// Root directory structure (./main.go):
+// .
+// ├── main.go (<-)
+
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func main() {
+	separator := createSeparator(20)
+	initializeReaderIgnore()
+	processDirectoryStructure(".", "files_structure.txt", separator)
+}
+
+func createSeparator(length int) string {
+	return strings.Repeat("-", length)
+}
+
+func initializeReaderIgnore() {
+	if _, err := os.Stat(".readerignore"); os.IsNotExist(err) {
+		defaultPatterns := []string{
+			"#REPLIT", ".local", ".config", ".cache", "",
+			"#NODE", "node_modules", "",
+			"*.log", "",
+			"#READER", ".readerignore", ".files_structure.txt",
+		}
+		writeFile(".readerignore", strings.Join(defaultPatterns, "\n"))
+	}
+}
+
+func writeFile(filename, content string) {
+	if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+		panic(err)
+	}
+}
+
+func processDirectoryStructure(startPath, outputFilePath, separator string) {
+	excludePatterns := readReaderIgnore()
+	paths := walkDirectory(startPath, excludePatterns, startPath)
+
+	outputFile := createFile(outputFilePath)
+	defer outputFile.Close()
+
+	printContents(paths, outputFile, separator)
+}
+
+func readReaderIgnore() []string {
+	var patterns []string
+	file, err := os.Open(".readerignore")
+	if err != nil {
+		return patterns
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "#") && line != "" {
+			patterns = append(patterns, line)
+		}
+	}
+	return patterns
+}
+
+func walkDirectory(startPath string, excludePatterns []string, relativePath string) []string {
+	var paths []string
+	filepath.Walk(startPath, func(path string, info os.FileInfo, err error) error {
+		if err == nil && path != startPath && !shouldExclude(path, excludePatterns, relativePath) {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	return paths
+}
+
+func shouldExclude(path string, patterns []string, relativePath string) bool {
+	rel, err := filepath.Rel(relativePath, path)
+	if err != nil {
+		return false
+	}
+	for _, pattern := range patterns {
+		if strings.HasPrefix(rel, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func createFile(filename string) *os.File {
+	file, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	return file
+}
+
+func printContents(paths []string, outputFile *os.File, separator string) {
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		printFileDetails(path, info, outputFile, separator)
+	}
+}
+
+func printFileDetails(path string, info os.FileInfo, outputFile *os.File, separator string) {
+	// Print file size
+	fmt.Fprintf(outputFile, "\n// The size of (%s): %dKB\n", path, info.Size()/1024)
+	fmt.Fprintln(outputFile, separator)
+
+	// Print file location
+	fmt.Fprintf(outputFile, "\n// The file location of (%s):\n", path)
+	fmt.Fprintln(outputFile, "// .")
+	fmt.Fprintf(outputFile, "// ├── %s (<-)\n", filepath.Base(path))
+	fmt.Fprintln(outputFile, separator)
+
+	// Print file contents
+	if !info.IsDir() {
+		content, _ := ioutil.ReadFile(path)
+		fmt.Fprintf(outputFile, "\n// The content of (%s):\n", path)
+		fmt.Fprintln(outputFile, string(content))
+		fmt.Fprintln(outputFile, separator)
+	}
+}

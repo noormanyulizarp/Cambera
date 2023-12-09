@@ -1,0 +1,13 @@
+#REPLIT
+.local
+.config
+.cache
+
+#NODE
+node_modules
+
+*.log
+
+#READER
+.readerignore
+.files_structure.txt
