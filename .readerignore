@@ -15,8 +15,15 @@ node_modules
 # IDEs and Editors
 .vscode
 .idea
+*.iml
+*.ipr
+*.iws
 *~
 *.swp
+
+# Operating System
+.DS_Store
+Thumbs.db
 
 # Reader
 .readerignore

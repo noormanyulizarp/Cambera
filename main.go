@@ -1,4 +1,4 @@
-// The file location of (main.go):
+// Root directory structure (./main.go):
 // .
 // ├── main.go (<-)
 
@@ -44,8 +44,15 @@ func initializeReaderIgnore() {
 			"# IDEs and Editors",
 			".vscode",
 			".idea",
+			"*.iml",
+			"*.ipr",
+			"*.iws",
 			"*~",
 			"*.swp",
+			"",
+			"# Operating System",
+			".DS_Store",
+			"Thumbs.db",
 			"",
 			"# Reader",
 			".readerignore",
