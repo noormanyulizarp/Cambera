@@ -20,20 +20,24 @@ const (
 
 func main() {
 	rootPath := "."
-	ensureIgnoreFileExists()
-	paths := getPathsToProcess(rootPath, readIgnorePatterns())
+	if err := ensureIgnoreFileExists(); err != nil {
+		fmt.Printf("Error ensuring ignore file exists: %v\n", err)
+		os.Exit(1)
+	}
+	paths, err := getPathsToProcess(rootPath, readIgnorePatterns())
+	if err != nil {
+		fmt.Printf("Error processing paths: %v\n", err)
+		os.Exit(1)
+	}
 	processDirectoryStructure(rootPath, paths)
 }
 
-func ensureIgnoreFileExists() {
+func ensureIgnoreFileExists() error {
 	if _, err := os.Stat(ReaderIgnoreFile); os.IsNotExist(err) {
 		content := getDefaultIgnorePatterns()
-		err := ioutil.WriteFile(ReaderIgnoreFile, []byte(content), DefaultPermissions)
-		if err != nil {
-			fmt.Printf("Error creating %s: %v\n", ReaderIgnoreFile, err)
-			os.Exit(1)
-		}
+		return ioutil.WriteFile(ReaderIgnoreFile, []byte(content), DefaultPermissions)
 	}
+	return nil
 }
 
 func getDefaultIgnorePatterns() string {
@@ -58,12 +62,11 @@ func getDefaultIgnorePatterns() string {
 	return strings.Join(patterns, "\n")
 }
 
-func getPathsToProcess(rootPath string, excludePatterns []string) []string {
+func getPathsToProcess(rootPath string, excludePatterns []string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			fmt.Printf("Error accessing path %q: %v\n", path, err)
-			return err
+			return fmt.Errorf("error accessing path %q: %w", path, err)
 		}
 		if !shouldExclude(path, excludePatterns) {
 			paths = append(paths, path)
@@ -71,11 +74,10 @@ func getPathsToProcess(rootPath string, excludePatterns []string) []string {
 		return nil
 	})
 	if err != nil {
-		fmt.Printf("Error walking the path %q: %v\n", rootPath, err)
-		os.Exit(1)
+		return nil, err
 	}
 	sort.Strings(paths)
-	return paths
+	return paths, nil
 }
 
 func readIgnorePatterns() []string {
@@ -106,15 +108,17 @@ func processDirectoryStructure(rootPath string, paths []string) {
 	defer outputFile.Close()
 
 	for _, path := range paths {
-		printFileDetails(rootPath, path, outputFile)
+		if err := printFileDetails(rootPath, path, outputFile); err != nil {
+			fmt.Printf("Error printing file details for %s: %v\n", path, err)
+			continue
+		}
 	}
 }
 
-func printFileDetails(rootPath, path string, outputFile *os.File) {
+func printFileDetails(rootPath, path string, outputFile *os.File) error {
 	info, err := os.Stat(path)
 	if err != nil {
-		fmt.Fprintf(outputFile, "Error getting info for %s: %v\n", path, err)
-		return
+		return fmt.Errorf("error getting info for %s: %w", path, err)
 	}
 
 	sizeStr := formatFileSize(info.Size())
@@ -132,6 +136,7 @@ func printFileDetails(rootPath, path string, outputFile *os.File) {
 		fmt.Fprintln(outputFile, string(content))
 		fmt.Fprintf(outputFile, "%s\n", separator)
 	}
+	return nil
 }
 
 func formatFileSize(size int64) string {
@@ -150,7 +155,6 @@ func shouldExclude(path string, patterns []string) bool {
 	for _, pattern := range patterns {
 		matched, err := filepath.Match(pattern, relPath)
 		if err != nil {
-			fmt.Printf("Error matching pattern %s: %v\n", pattern, err)
 			continue
 		}
 

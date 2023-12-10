@@ -28,6 +28,7 @@ Thumbs.db
 # Reader
 .readerignore
 files_structure.txt
+
 # Additional Patterns
 .project-rc
 __pycache__/
@@ -82,6 +83,7 @@ celerybeat-schedule
 *.sage.py
 /site
 .mypy_cache/
+
 # Media files
 *.mp4
 *.jpg
