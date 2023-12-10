@@ -29,7 +29,39 @@ func main() {
 		fmt.Printf("Error processing paths: %v\n", err)
 		os.Exit(1)
 	}
-	processDirectoryStructure(rootPath, paths)
+
+	outputFile, err := os.Create(OutputFileName)
+	if err != nil {
+		fmt.Printf("Error creating output file: %v\n", err)
+		os.Exit(1)
+	}
+	defer outputFile.Close()
+
+	printDirectoryTree(outputFile, rootPath, paths)
+	processDirectoryStructure(outputFile, rootPath, paths)
+}
+
+func printDirectoryTree(outputFile *os.File, rootPath string, paths []string) {
+	fmt.Fprintln(outputFile, "Directory Structure:")
+	for _, path := range paths {
+		relPath, _ := filepath.Rel(rootPath, path)
+		dirTree := generateDirTree(relPath)
+		fmt.Fprintln(outputFile, dirTree)
+	}
+	fmt.Fprintln(outputFile)
+}
+
+func generateDirTree(path string) string {
+	parts := strings.Split(path, string(os.PathSeparator))
+	tree := ""
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			tree += "└── " + part
+		} else {
+			tree += "├── " + part + "\n" + strings.Repeat("│   ", i+1)
+		}
+	}
+	return tree
 }
 
 func ensureIgnoreFileExists() error {
@@ -99,14 +131,7 @@ func readIgnorePatterns() []string {
 	return patterns
 }
 
-func processDirectoryStructure(rootPath string, paths []string) {
-	outputFile, err := os.Create(OutputFileName)
-	if err != nil {
-		fmt.Printf("Error creating output file: %v\n", err)
-		os.Exit(1)
-	}
-	defer outputFile.Close()
-
+func processDirectoryStructure(outputFile *os.File, rootPath string, paths []string) {
 	for _, path := range paths {
 		if err := printFileDetails(rootPath, path, outputFile); err != nil {
 			fmt.Printf("Error printing file details for %s: %v\n", path, err)
